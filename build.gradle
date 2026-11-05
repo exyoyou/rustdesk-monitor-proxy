@@ -85,6 +85,8 @@ repositories {
 
 dependencies {
     implementation project(':monitor-config')
+    implementation project(':monitor-logger')
+    implementation project(':monitor-webdav')
 
     // 对外暴露 libXray，宿主只依赖本模块即可
     api(name: 'libXray', ext: 'aar')

@@ -1,0 +1,32 @@
+// 仅作结构参考，不会被加载。把它复制到 WebDAV 的 monitorDir 下并改名为 xray_core.json，填入真实服务器信息。
+// 入站（inbounds）和日志（log）会被应用在运行时整个替换：对 ID 服务器的每个转发端口（proxy.forwardPorts，默认 21115-21117）
+// 在 127.0.0.1 上开一个同端口的 dokodemo-door（TCP+UDP），转发到 ID 服务器主机的同一端口，并全部交给 tag 为 proxy 的出站。
+// 21118 / 21119 是 RustDesk 本机自己占用的端口，即使写进 forwardPorts 也会被跳过。
+// 所以这里不需要写入站，也不需要写服务器地址。隧道服务端必须允许 UDP（hbbs 的 21116 注册走 UDP）。
+// 协议由 outbounds 决定：下面是 VMess + WebSocket + TLS（可走 Cloudflare）；换成 VLESS / Reality 只需要改出站。
+{
+  "log": { "loglevel": "warning" },
+  "inbounds": [],
+  "outbounds": [
+    {
+      "tag": "proxy",
+      "protocol": "vmess",
+      "settings": {
+        "vnext": [
+          {
+            "address": "tunnel.example.com",
+            "port": 443,
+            "users": [{ "id": "00000000-0000-0000-0000-000000000000", "alterId": 0, "security": "auto" }]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": { "serverName": "tunnel.example.com" },
+        "wsSettings": { "path": "/your-ws-path", "headers": { "Host": "tunnel.example.com" } }
+      }
+    },
+    { "tag": "block", "protocol": "blackhole" }
+  ]
+}
