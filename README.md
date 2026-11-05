@@ -10,8 +10,8 @@ RustDesk Android 端的应用内代理模块（仅 Android，不使用 VpnServic
 
 ```
 monitor-proxy/
-├── libxray/                  子模块：https://github.com/XTLS/libXray，固定在稳定版 tag
-├── libs/                     libXray.aar 的存放位置（构建生成，不入库）
+├── build.gradle              含 libXray 预编译 AAR 的下载与校验
+├── libs/                     libXray.aar 的存放位置（构建时自动下载，不入库）
 ├── src/main/
 │   ├── java/youyou/monitor/proxy/
 │   │   ├── ProxyController.kt    状态机：Direct / StartingCore / Proxy / Probing
@@ -60,19 +60,15 @@ Xray 配置取用顺序：远程下载 > 上次校验通过的缓存 > APK 内 `
 - 配置允许带 `//` 注释。
 - 真实节点信息（UUID、域名）不要放进仓库或 APK，只放在 WebDAV 上。本地调试用的配置文件命名为 `*.local.json`，已在 `.gitignore` 中排除。
 
-## 构建 libXray
+## libXray
 
-`libxray/` 固定在 libXray 的稳定版本（当前 `v26.10.31`，对应 Xray-core `v26.10.31`）。升级时只改子模块指向的 tag。
+直接使用 libXray 官方 release 里预编译好的 `libxray-android.zip`（内含 `libXray.aar`），**不需要 Go、gomobile**，本地和 GitHub Actions 都不用额外步骤。
 
-构建需要：Go、`gomobile`、Python 3、Android SDK 和 NDK（`ANDROID_HOME`、`ANDROID_NDK_HOME` 已设置）。
-
-```bash
-cd libxray
-python3 build/main.py android
-# 产物：libxray/libXray.aar，复制到 monitor-proxy/libs/
-```
-
-构建会生成包含 `armeabi-v7a`、`arm64-v8a`、`x86`、`x86_64` 的 AAR。Flutter 的 `--split-per-abi` 会自动只把对应架构的库打进对应的 APK。
+- 当前版本：`v26.10.31`（对应 Xray-core `v26.10.31`）。
+- `build.gradle` 在配置阶段检查 `libs/libXray.aar`：不存在或版本不一致时，从 GitHub release 下载、校验 sha256 后解出 AAR；已存在则跳过。
+- 升级版本：修改 `build.gradle` 顶部的 `libXrayVersion` 和 `libXraySha256`（release 页面上 `libxray-android.zip` 旁边显示的 sha256）。
+- 构建机器需要能访问 GitHub。无法联网时，手动下载 zip，把 `libXray.aar` 放进 `libs/`，并在 `libs/libXray.version` 里写入 `<版本号> <sha256>`。
+- AAR 包含 `armeabi-v7a`、`arm64-v8a`、`x86`、`x86_64`。Flutter 的 `--split-per-abi` 会自动只把对应架构的库打进对应的 APK；universal 包会包含全部四个架构，体积较大。
 
 libXray 的接口只有一个入口 `Invoke(requestJSON)`（`apiVersion: 3`），本模块用到 `runXray`、`stopXray`、`getXrayState`、`getFreePorts`。该项目声明不保证接口稳定，升级版本后需要重新核对。
 
@@ -90,7 +86,7 @@ dependencies {
 }
 ```
 
-克隆主仓库时需要递归拉取子模块（本模块内还有 `libxray` 子模块）：
+克隆主仓库时需要递归拉取子模块：
 
 ```bash
 git clone --recursive <rustdesk-repo>
@@ -98,7 +94,7 @@ git clone --recursive <rustdesk-repo>
 git submodule update --init --recursive
 ```
 
-CI 的 `actions/checkout` 使用 `submodules: recursive` 即可。
+CI 的 `actions/checkout` 使用 `submodules: recursive` 即可，不需要改动现有工作流。
 
 ## 服务端
 

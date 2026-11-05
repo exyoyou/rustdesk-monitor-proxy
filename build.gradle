@@ -1,0 +1,95 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// libXray 预编译 AAR：直接取官方 release，不在本地/CI 编译（不需要 Go、gomobile）。
+// 升级时只改下面两个值：版本号，以及 release 页面上 libxray-android.zip 的 sha256。
+def libXrayVersion = 'v26.10.31'
+def libXraySha256 = 'fb99f04acf379cc2957c1e1d0ce2b3c0005d3f49974a44c09a11242a0562c1ca'
+
+def libXrayAar = file('libs/libXray.aar')
+def libXrayMarker = file('libs/libXray.version')
+def libXrayStamp = "${libXrayVersion} ${libXraySha256}"
+
+// 配置阶段检查：AAR 不存在或版本不一致才下载，已存在则什么都不做（CI 缓存/本地都不会重复下载）。
+// 放在配置阶段是为了让 IDE 同步和命令行构建都能直接解析到这个依赖。
+if (!libXrayAar.exists() || !libXrayMarker.exists() || libXrayMarker.text.trim() != libXrayStamp) {
+    def url = "https://github.com/XTLS/libXray/releases/download/${libXrayVersion}/libxray-android.zip"
+    def zipFile = new File(buildDir, "libxray/libxray-android-${libXrayVersion}.zip")
+    zipFile.parentFile.mkdirs()
+    logger.lifecycle("monitor-proxy: downloading libXray ${libXrayVersion}")
+    try {
+        new URL(url).withInputStream { input -> zipFile.withOutputStream { it << input } }
+    } catch (Exception e) {
+        throw new GradleException("monitor-proxy: 下载 libXray 失败，可手动下载 ${url} 并把其中的 libXray.aar 放到 ${libXrayAar}（同时写入 ${libXrayMarker.name}: ${libXrayStamp}）: ${e.message}", e)
+    }
+
+    def digest = java.security.MessageDigest.getInstance('SHA-256')
+    zipFile.withInputStream { input ->
+        byte[] buf = new byte[65536]
+        int n
+        while ((n = input.read(buf)) > 0) {
+            digest.update(buf, 0, n)
+        }
+    }
+    def actual = digest.digest().encodeHex().toString()
+    if (actual != libXraySha256) {
+        zipFile.delete()
+        throw new GradleException("monitor-proxy: libXray 校验失败，期望 ${libXraySha256}，实际 ${actual}")
+    }
+
+    libXrayAar.parentFile.mkdirs()
+    def zip = new java.util.zip.ZipFile(zipFile)
+    try {
+        def entry = Collections.list(zip.entries()).find { it.name.endsWith('/libXray.aar') || it.name == 'libXray.aar' }
+        if (entry == null) {
+            throw new GradleException("monitor-proxy: libxray-android.zip 中没有 libXray.aar")
+        }
+        zip.getInputStream(entry).withCloseable { input ->
+            libXrayAar.withOutputStream { it << input }
+        }
+    } finally {
+        zip.close()
+    }
+    libXrayMarker.text = libXrayStamp + '\n'
+}
+
+android {
+    namespace 'youyou.monitor.proxy'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 22
+
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+repositories {
+    flatDir { dirs 'libs' }
+}
+
+dependencies {
+    implementation project(':monitor-config')
+
+    // 对外暴露 libXray，宿主只依赖本模块即可
+    api(name: 'libXray', ext: 'aar')
+
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.21"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+}

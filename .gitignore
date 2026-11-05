@@ -9,9 +9,10 @@ captures/
 .externalNativeBuild/
 .DS_Store
 
-# libXray 编译产物（由 :monitor-proxy:buildLibXray 生成，不入库）
+# libXray 预编译 AAR（构建时由 build.gradle 从官方 release 下载，不入库）
 libs/*.aar
 libs/*.jar
+libs/libXray.version
 
 # 含真实节点信息（UUID/域名等）的 Xray 配置，只用于本地调试，禁止提交
 *.local.json
